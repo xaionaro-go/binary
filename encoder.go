@@ -6,6 +6,7 @@ package binary
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"math"
 	"reflect"
@@ -52,6 +53,8 @@ type Encoder struct {
 	schemas map[reflect.Type]Codec
 	out     io.Writer
 	err     error
+
+	defaultCountType CountType
 }
 
 // NewEncoder creates a new encoder.
@@ -62,10 +65,16 @@ func NewEncoder(out io.Writer) *Encoder {
 	}
 }
 
+// SetDefaultCountType defines the default size of a slice item count field.
+func (e *Encoder) SetDefaultCountType(countType CountType) {
+	e.defaultCountType = countType
+}
+
 // Reset resets the encoder and makes it ready to be reused.
 func (e *Encoder) Reset(out io.Writer) {
 	e.out = out
 	e.err = nil
+	e.defaultCountType = 0
 }
 
 // Buffer returns the underlying writer.
@@ -114,6 +123,32 @@ func (e *Encoder) WriteVarint(v int64) {
 	e.Write(e.scratch[:(i + 1)])
 }
 
+func (e *Encoder) WriteCount(x uint64) {
+	switch e.defaultCountType {
+	case CountTypeUvarint:
+		e.WriteUvarint(x)
+	case CountTypeUint8:
+		if x >= 1<<8 {
+			panic("x is too large")
+		}
+		e.WriteUint8(uint8(x))
+	case CountTypeLEUint16:
+		if x >= 1<<16 {
+			panic("x is too large")
+		}
+		e.WriteUint16(uint16(x))
+	case CountTypeLEUint32:
+		if x >= 1<<32 {
+			panic("x is too large")
+		}
+		e.WriteUint32(uint32(x))
+	case CountTypeLEUint64:
+		e.WriteUint64(x)
+	default:
+		panic(fmt.Sprintf("unexpected CountType: %v", e.defaultCountType))
+	}
+}
+
 // WriteUvarint writes a variable size unsigned integer
 func (e *Encoder) WriteUvarint(x uint64) {
 	i := 0
@@ -124,6 +159,12 @@ func (e *Encoder) WriteUvarint(x uint64) {
 	}
 	e.scratch[i] = byte(x)
 	e.Write(e.scratch[:(i + 1)])
+}
+
+// WriteUint8 writes a Uint8
+func (e *Encoder) WriteUint8(v uint8) {
+	e.scratch[0] = byte(v)
+	e.Write(e.scratch[:1])
 }
 
 // WriteUint16 writes a Uint16

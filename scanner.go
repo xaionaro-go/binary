@@ -121,8 +121,9 @@ func scanType(t reflect.Type) (Codec, error) {
 			field := t.Field(i)
 			if c, err := scanType(field.Type); err == nil {
 				v = append(v, fieldCodec{
-					Index: i,
-					Codec: c,
+					Index:     i,
+					Codec:     c,
+					CountType: parseCountType(field.Tag.Get("count_type")),
 				})
 			} else {
 				return nil, err

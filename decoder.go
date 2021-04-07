@@ -6,6 +6,7 @@ package binary
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"reflect"
@@ -42,6 +43,8 @@ type Decoder struct {
 	s       *reader // Not using the interface for better inlining
 	scratch [10]byte
 	schemas map[reflect.Type]Codec
+
+	defaultCountType CountType
 }
 
 // NewDecoder creates a binary decoder.
@@ -74,9 +77,35 @@ func (d *Decoder) Decode(v interface{}) (err error) {
 	return
 }
 
+// SetDefaultCountType defines the default size of a slice item count field.
+func (d *Decoder) SetDefaultCountType(countType CountType) {
+	d.defaultCountType = countType
+}
+
 // Read reads a set of bytes
 func (d *Decoder) Read(b []byte) (int, error) {
 	return d.r.Read(b)
+}
+
+// ReadUvarint reads a variable-length Uint64 from the buffer.
+func (d *Decoder) ReadCount() (uint64, error) {
+	switch d.defaultCountType {
+	case CountTypeUvarint:
+		return d.ReadUvarint()
+	case CountTypeUint8:
+		out, err := d.ReadUint8()
+		return uint64(out), err
+	case CountTypeLEUint16:
+		out, err := d.ReadUint16()
+		return uint64(out), err
+	case CountTypeLEUint32:
+		out, err := d.ReadUint32()
+		return uint64(out), err
+	case CountTypeLEUint64:
+		return d.ReadUint64()
+	default:
+		panic(fmt.Sprintf("unexpected CountType: %v", d.defaultCountType))
+	}
 }
 
 // ReadUvarint reads a variable-length Uint64 from the buffer.
@@ -87,6 +116,15 @@ func (d *Decoder) ReadUvarint() (uint64, error) {
 // ReadVarint reads a variable-length Int64 from the buffer.
 func (d *Decoder) ReadVarint() (int64, error) {
 	return binary.ReadVarint(d.r)
+}
+
+// ReadUint8 reads a uint8
+func (d *Decoder) ReadUint8() (out uint8, err error) {
+	var b []byte
+	if b, err = d.sliceOrScratch(1); err == nil {
+		out = b[0]
+	}
+	return
 }
 
 // ReadUint16 reads a uint16
